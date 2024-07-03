@@ -51,6 +51,14 @@ pub fn build(b: *std.Build) !void {
         });
         const sdl_lib = sdl_dep.artifact("sdl");
         exe.linkLibrary(sdl_lib);
+
+        // NOTE(jae): 2024-07-03
+        // Hack for Linux to use the SDL2 version compiled using native Linux tools
+        if (target.result.os.tag == .linux) {
+            for (sdl_lib.root_module.lib_paths.items) |lib_path| {
+                exe.addLibraryPath(lib_path);
+            }
+        }
         // NOTE(jae): 2024-07-02
         // Old logic that existed in: https://github.com/andrewrk/sdl-zig-demo
         // if (target.query.isNativeOs() and target.result.os.tag == .linux) {
