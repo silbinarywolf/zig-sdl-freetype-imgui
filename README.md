@@ -1,6 +1,6 @@
 # Zig SDL+Freetype+ImGui
 
-*Zig Version:* **0.13.0**
+![Continuous integration](https://github.com/silbinarywolf/zig-sdl-freetype-imgui/actions/workflows/ci.yml/badge.svg)
 
 This is an example Zig project for compiling SDL + Freetype + ImGui as-is on:
 - Windows
@@ -8,6 +8,10 @@ This is an example Zig project for compiling SDL + Freetype + ImGui as-is on:
 - Linux
 
 This project utilizes Zig's built-in Dependency management to pull down SDL, Freetype, ImGui and cimgui from their respective Github repositories and just uses their C bindings.
+
+## Requirements
+
+* [Zig 0.13.x](https://ziglang.org/download/#release-0.13.0)
 
 ## How to run
 
