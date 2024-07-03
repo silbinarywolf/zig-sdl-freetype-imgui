@@ -1,0 +1,18 @@
+.zig-cache
+zig-out
+
+# ignore imgui local config
+imgui.ini
+
+# for inlined dependencies, ignore files that we won't use
+dependency/**/.png
+dependency/**/.ico
+dependency/**/.bmp
+dependency/**/.zip
+dependency/**/Makefile
+
+dependency/freetype/docs
+dependency/freetype/builds/*
+!dependency/freetype/windows
+!dependency/freetype/unix
+!dependency/freetype/mac
