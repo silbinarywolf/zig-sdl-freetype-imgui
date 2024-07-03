@@ -1,0 +1,23 @@
+// https://github.com/ziglang/zig/blob/master/doc/build.zig.zon.md
+.{
+    .name = "zig-sdl-freetype-imgui",
+    .version = "0.0.0",
+    .dependencies = .{
+        .sdl = .{
+            .path = "third-party/sdl",
+        },
+        .freetype = .{
+            .path = "third-party/freetype",
+        },
+        .imgui = .{
+            .path = "third-party/imgui",
+        },
+    },
+    .paths = .{
+        "LICENSE",
+        "README.md",
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

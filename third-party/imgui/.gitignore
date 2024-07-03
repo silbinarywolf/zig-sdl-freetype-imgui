@@ -1,0 +1,9 @@
+# ignore files from upstream we don't want to commit so that
+# we can lower the filesize
+#
+# rather than manually delete the files out, we ignore here so updating to latest versions can be mindless
+upstream/docs
+upstream/builds/*
+!upstream/builds/windows
+!upstream/builds/unix
+!upstream/builds/mac

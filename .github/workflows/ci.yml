@@ -1,0 +1,29 @@
+name: CI
+
+on: [push, pull_request]
+
+concurrency:
+  # Cancels pending runs when a PR gets updated.
+  group: ${{ github.head_ref || github.run_id }}-${{ github.actor }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Wii example
+    strategy:
+      matrix:
+        zig: ["0.13.0"]
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+
+    runs-on: ${{matrix.os}}
+ 
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: ${{matrix.zig}}
+
+    - name: Build App
+      run: zig build --verbose
