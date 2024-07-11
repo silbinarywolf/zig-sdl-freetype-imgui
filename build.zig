@@ -75,15 +75,6 @@ pub fn build(b: *std.Build) !void {
         break :blk sdl_module;
     };
 
-    // add tray
-    // {
-    //     const tray_dep = b.dependency("tray", .{
-    //         .optimize = .ReleaseFast,
-    //         .target = target,
-    //     });
-    //     exe.root_module.addImport("tray", tray_dep.module("tray"));
-    // }
-
     // add freetype
     const freetype_lib = blk: {
         var freetype_dep = b.dependency("freetype", .{

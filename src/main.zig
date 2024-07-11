@@ -26,7 +26,7 @@ pub fn main() !void {
         window_y,
         640,
         480,
-        sdl.SDL_WINDOW_ALWAYS_ON_TOP, // sdl.SDL_WINDOW_HIDDEN,
+        sdl.SDL_WINDOW_ALWAYS_ON_TOP | sdl.SDL_WINDOW_RESIZABLE, // sdl.SDL_WINDOW_HIDDEN,
     ) orelse {
         log.err("unable to create window: {s}", .{sdl.SDL_GetError()});
         return error.SDLWindowInitializationFailed;
@@ -39,19 +39,27 @@ pub fn main() !void {
     };
     defer sdl.SDL_DestroyRenderer(renderer);
 
+    const font_data = @embedFile("fonts/Lato-Regular.ttf");
+    const font_atlas: *imgui.ImFontAtlas = imgui.ImFontAtlas_ImFontAtlas();
+    _ = imgui.ImFontAtlas_AddFontFromMemoryTTF(
+        font_atlas,
+        @constCast(@ptrCast(font_data[0..].ptr)),
+        font_data.len,
+        32,
+        null,
+        null,
+    );
+    // defer imgui.ImFontAtlas_destroy(font_atlas); // Segmentation Fault: IM_FREE(font_cfg.FontData), due to font not being owned by IMGUI allocators
+
     // Setup ImGui
-    const ctx = imgui.igCreateContext(null);
-    defer imgui.igDestroyContext(ctx); // Investigate: This causes a "free() invalid pointer" error on Linux (Kubuntu)
-    const io: *imgui.ImGuiIO = imgui.igGetIO();
+    const ctx = imgui.igCreateContext(font_atlas);
+    defer imgui.igDestroyContext(ctx);
 
     _ = imgui.ImGui_ImplSDL2_InitForSDLRenderer(@ptrCast(window), @ptrCast(renderer));
     defer imgui.ImGui_ImplSDL2_Shutdown();
 
     _ = imgui.ImGui_ImplSDLRenderer2_Init(@ptrCast(renderer));
     defer imgui.ImGui_ImplSDLRenderer2_Shutdown();
-
-    const font_data = @embedFile("fonts/Lato-Regular.ttf");
-    _ = imgui.ImFontAtlas_AddFontFromMemoryTTF(io.Fonts, @constCast(@ptrCast(font_data[0..].ptr)), font_data.len, 18, null, null);
 
     var has_quit = false;
     while (!has_quit) {
@@ -87,6 +95,9 @@ pub fn main() !void {
                 imgui.ImGuiWindowFlags_NoDecoration | imgui.ImGuiWindowFlags_NoResize | imgui.ImGuiWindowFlags_NoBackground);
             defer imgui.igEnd();
 
+            // Show full demo
+            imgui.igShowDemoWindow(null);
+
             {
                 if (imgui.igBeginMenuBar()) {
                     defer imgui.igEndMenuBar();
@@ -102,9 +113,6 @@ pub fn main() !void {
                 // imgui.igSliderFloat("float", &f, 0.0f, 1.0f, "%.3f", 0);
                 // imgui.igText("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io->Framerate, io->Framerate);
             }
-
-            // Show full demo
-            imgui.igShowDemoWindow(null);
         }
 
         imgui.igRender();
