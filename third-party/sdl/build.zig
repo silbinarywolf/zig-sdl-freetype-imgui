@@ -9,6 +9,8 @@ pub fn build(b: *std.Build) !void {
     const sdl_path = sdl_dep.path("");
     const sdl_include_path = sdl_path.path(b, "include");
 
+    var sdl_config_header: ?*std.Build.Step.ConfigHeader = null;
+
     if (target.result.os.tag == .linux) {
         // NOTE(jae): 2024-07-02
         // Compiling on Linux is an involved process with various system include directories
@@ -36,6 +38,25 @@ pub fn build(b: *std.Build) !void {
             .link_libc = true,
         });
 
+        // Change the working directory for when we call "./configure" and "make" so it doesn't
+        // polute the SDL dependency folder.
+        //
+        // We want to avoid this so that you can compile on Linux and then cross-compile without issues
+        const sdl_configure_dir: std.Build.LazyPath = blk: {
+            // TODO: Replace "sdl2" with some sort of hash/digest
+            const hash = "sdl2";
+            const tmp_dir_sub_path = b.pathJoin(&.{ "tmp", hash, "sdl-config" });
+            const result_path = b.cache_root.join(b.allocator, &.{tmp_dir_sub_path}) catch @panic("OOM");
+            b.cache_root.handle.makePath(tmp_dir_sub_path) catch |err| {
+                std.debug.print("unable to make tmp path '{s}': {s}\n", .{
+                    result_path, @errorName(err),
+                });
+            };
+            break :blk .{
+                .cwd_relative = result_path,
+            };
+        };
+
         // Setup SDL_config.h (if doesn't exist)
         const configure_script = b.addSystemCommand(&(.{
             sdl_dep.path("./configure").getPath(b),
@@ -43,7 +64,8 @@ pub fn build(b: *std.Build) !void {
         // NOTE(jae): 2024-07-02
         // Setup --prefix so that this operation is only called once and cached after initially setup
         const config_cache_path = configure_script.addPrefixedOutputFileArg("--prefix=", "sdl_config");
-        configure_script.setCwd(sdl_dep.path(""));
+        configure_script.addPrefixedDirectoryArg("--srcdir=", sdl_dep.path(""));
+        configure_script.setCwd(sdl_configure_dir);
         configure_script.setName("SDL2: ./configure (creates SDL_config.h)");
 
         // Run make
@@ -51,7 +73,7 @@ pub fn build(b: *std.Build) !void {
             "make",
             "--silent", // stop printing `/bin/bash ./build-scripts//updaterev.sh --vendor ""`
         }));
-        make_script.setCwd(sdl_dep.path(""));
+        make_script.setCwd(sdl_configure_dir);
         make_script.setName("SDL2: make");
         switch (config_cache_path) {
             .generated => |config_cache_path_generated| {
@@ -65,7 +87,7 @@ pub fn build(b: *std.Build) !void {
         const make_install_script = b.addSystemCommand(&(.{ "make", "install" }));
         make_install_script.addArg("prefix=\"\""); // remove /usr/local/
         const output_lib_path = make_install_script.addPrefixedOutputDirectoryArg("DESTDIR=", "sdl-install");
-        make_install_script.setCwd(sdl_dep.path(""));
+        make_install_script.setCwd(sdl_configure_dir);
         make_install_script.setName("SDL2: make install");
         make_install_script.step.dependOn(&make_script.step);
 
@@ -81,8 +103,6 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .link_libc = true,
         });
-
-        lib.addIncludePath(sdl_include_path);
         lib.addCSourceFiles(.{
             .root = sdl_path,
             .files = &generic_src_files,
@@ -104,6 +124,10 @@ pub fn build(b: *std.Build) !void {
                 lib.linkSystemLibrary("ole32");
             },
             .macos => {
+                // NOTE(jae): 2024-07-07
+                // Cross-compilation from Linux to Mac requires more effort currently (Zig 0.13.0)
+                // See: https://github.com/ziglang/zig/issues/1349
+
                 lib.addCSourceFiles(.{
                     .root = sdl_path,
                     .files = &darwin_src_files,
@@ -132,10 +156,15 @@ pub fn build(b: *std.Build) !void {
                     .style = .{ .cmake = sdl_include_path.path(b, "SDL_config.h.cmake") },
                     .include_path = "SDL/SDL_config.h",
                 }, .{});
+                sdl_config_header = config_header;
+
                 lib.addConfigHeader(config_header);
                 lib.installConfigHeader(config_header);
             },
         }
+        // NOTE(jae): 2024-07-07
+        // This must come *after* addConfigHeader logic above for per-OS so that the include for SDL_config.h takes precedence
+        lib.addIncludePath(sdl_include_path);
         // NOTE(jae): 2024-04-07
         // Not installing header as we include/export it from the module
         // lib.installHeadersDirectory("include", "SDL");
@@ -145,6 +174,9 @@ pub fn build(b: *std.Build) !void {
     var module = b.addModule("sdl", .{
         .root_source_file = b.path("src/sdl.zig"),
     });
+    if (sdl_config_header) |config_header| {
+        module.addConfigHeader(config_header);
+    }
     module.addIncludePath(sdl_include_path);
 }
 
