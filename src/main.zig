@@ -39,8 +39,20 @@ pub fn main() !void {
     };
     defer sdl.SDL_DestroyRenderer(renderer);
 
+    const font_data = @embedFile("fonts/Lato-Regular.ttf");
+    const font_atlas: *imgui.ImFontAtlas = imgui.ImFontAtlas_ImFontAtlas();
+    _ = imgui.ImFontAtlas_AddFontFromMemoryTTF(
+        font_atlas,
+        @constCast(@ptrCast(font_data[0..].ptr)),
+        font_data.len,
+        32,
+        null,
+        null,
+    );
+    // defer imgui.ImFontAtlas_destroy(font_atlas); // Segmentation Fault: IM_FREE(font_cfg.FontData);
+
     // Setup ImGui
-    const ctx = imgui.igCreateContext(null);
+    const ctx = imgui.igCreateContext(font_atlas);
     defer imgui.igDestroyContext(ctx); // Investigate: This causes a "free() invalid pointer" error on Linux (Kubuntu)
     const io: *imgui.ImGuiIO = imgui.igGetIO();
 
