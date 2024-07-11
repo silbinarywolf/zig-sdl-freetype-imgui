@@ -96,6 +96,15 @@ pub fn build(b: *std.Build) !void {
         lib.linkSystemLibrary("SDL2");
 
         b.installArtifact(lib);
+
+        // NOTE(jae): 2024-07-01
+        // We add this logic in the parent build.zig, hack to make the build use the "system library"
+        // we just built
+        // if (target.result.os.tag == .linux) {
+        //     for (sdl_lib.root_module.lib_paths.items) |lib_path| {
+        //         exe.addLibraryPath(lib_path);
+        //     }
+        // }
     } else {
         const lib = b.addStaticLibrary(.{
             .name = "sdl",
