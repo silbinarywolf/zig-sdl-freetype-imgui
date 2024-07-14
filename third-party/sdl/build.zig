@@ -38,14 +38,44 @@ pub fn build(b: *std.Build) !void {
             .link_libc = true,
         });
 
+        // Add -Dtarget and -Dcpu arguments to the SDL build
+        var sdl_host_arg: []const u8 = "";
+        var sdl_cpu_arg: []const u8 = "";
+        if (!target.query.isNative()) {
+            // ie. "arm-raspberry-linux-gnueabihf"
+            sdl_host_arg = try target.result.linuxTriple(b.allocator);
+            if (!std.mem.eql(u8, target.result.cpu.model.name, "baseline")) {
+                sdl_cpu_arg = target.result.cpu.model.name;
+            }
+        }
+
+        // Set CC environment variable to use the Zig compiler
+        var c_compiler_path = b.fmt("{s} cc", .{b.graph.zig_exe});
+        if (sdl_host_arg.len > 0) {
+            c_compiler_path = b.fmt("{s} --target={s}", .{ c_compiler_path, sdl_host_arg });
+        }
+        if (sdl_cpu_arg.len > 0) {
+            c_compiler_path = b.fmt("{s} -mcpu={s}", .{ c_compiler_path, sdl_cpu_arg });
+        }
+
+        // Put the SDL configs in their own folders
+        // ie. sdl-install-arm-linux-musleabihf-arm1176jzf_s
+        var sdl_cache_postfix: []const u8 = "";
+        if (sdl_host_arg.len > 0) {
+            sdl_cache_postfix = b.fmt("{s}-{s}", .{ sdl_cache_postfix, sdl_host_arg });
+        }
+        if (sdl_cpu_arg.len > 0) {
+            sdl_cache_postfix = b.fmt("{s}-{s}", .{ sdl_cache_postfix, sdl_cpu_arg });
+        }
+
         // Change the working directory for when we call "./configure" and "make" so it doesn't
         // polute the SDL dependency folder.
         //
         // We want to avoid this so that you can compile on Linux and then cross-compile without issues
         const sdl_configure_dir: std.Build.LazyPath = blk: {
             // TODO: Replace "sdl2" with some sort of hash/digest
-            const hash = "sdl2";
-            const tmp_dir_sub_path = b.pathJoin(&.{ "tmp", hash, "sdl-config" });
+            const hash: []const u8 = b.fmt("sdl2{s}", .{sdl_cache_postfix});
+            const tmp_dir_sub_path = b.pathJoin(&.{ "tmp", hash, "config" });
             const result_path = b.cache_root.join(b.allocator, &.{tmp_dir_sub_path}) catch @panic("OOM");
             b.cache_root.handle.makePath(tmp_dir_sub_path) catch |err| {
                 std.debug.print("unable to make tmp path '{s}': {s}\n", .{
@@ -61,10 +91,39 @@ pub fn build(b: *std.Build) !void {
         const configure_script = b.addSystemCommand(&(.{
             sdl_dep.path("./configure").getPath(b),
         }));
+
+        // NOTE(jae): 2024-07-14
+        // Configure C compiler to use Zig
+        configure_script.setEnvironmentVariable("CC", c_compiler_path);
         // NOTE(jae): 2024-07-02
         // Setup --prefix so that this operation is only called once and cached after initially setup
         const config_cache_path = configure_script.addPrefixedOutputFileArg("--prefix=", "sdl_config");
         configure_script.addPrefixedDirectoryArg("--srcdir=", sdl_dep.path(""));
+        if (sdl_host_arg.len > 0) {
+            configure_script.addArg(b.fmt("--host={s}", .{sdl_host_arg}));
+        }
+
+        // NOTE(jae): 2024-07-14
+        // I experimented with getting SDL2 to build for my Raspberry Pi Zero W
+        // - zig build -Doptimize=ReleaseSafe -Dtarget=arm-linux-musleabihf -Dcpu=arm1176jzf_s
+        // - https://www.leemeichin.com/posts/gettin-ziggy-with-it-pi-zero.html
+        //
+        // It ran... but required SDL2 to be installed via apt-get and then failed to initialize
+        // EGL with the following settings. So... this needs work to actually work.
+        const is_raspberry_pi = (std.mem.eql(u8, sdl_host_arg, "arm-linux-musleabihf") or std.mem.eql(u8, sdl_host_arg, "arm-linux-gnueabihf")) and
+            std.mem.eql(u8, sdl_cpu_arg, "arm1176jzf_s");
+        if (is_raspberry_pi) {
+            // Disable for Raspberry Pi
+            // https://wiki.libsdl.org/SDL2/README/raspberrypi
+            configure_script.addArg("--disable-pulseaudio");
+            configure_script.addArg("--disable-esd");
+            // Disable for Raspberry Pi
+            // NOTE(jae): I was missing headers when compiling on my system so.. goodbye
+            configure_script.addArg("--disable-video-wayland");
+            configure_script.addArg("--disable-video-kmsdrm");
+            configure_script.addArg("--disable-sndio"); // sndio is the software layer of the OpenBSD operating system that manages sound cards and MIDI ports
+        }
+
         configure_script.setCwd(sdl_configure_dir);
         configure_script.setName("SDL2: ./configure (creates SDL_config.h)");
 
@@ -86,7 +145,8 @@ pub fn build(b: *std.Build) !void {
         // NOTE(jae): 2024-07-02: If we ran cmake instead it could be threaded/multi-proc but for now this works
         const make_install_script = b.addSystemCommand(&(.{ "make", "install" }));
         make_install_script.addArg("prefix=\"\""); // remove /usr/local/
-        const output_lib_path = make_install_script.addPrefixedOutputDirectoryArg("DESTDIR=", "sdl-install");
+        const sdl_install_folder: []const u8 = b.fmt("sdl-install{s}", .{sdl_cache_postfix});
+        const output_lib_path = make_install_script.addPrefixedOutputDirectoryArg("DESTDIR=", sdl_install_folder);
         make_install_script.setCwd(sdl_configure_dir);
         make_install_script.setName("SDL2: make install");
         make_install_script.step.dependOn(&make_script.step);
